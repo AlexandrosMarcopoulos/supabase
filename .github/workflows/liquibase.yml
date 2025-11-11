@@ -1,49 +1,68 @@
-name: Liquibase → Supabase
+name: Liquibase → Supabase (manual first run, no Docker)
 
 on:
-  workflow_dispatch: {}
-  push:
-    branches: [ "dev" ]
-    paths: [ "db/changelog/**" ]
+  workflow_dispatch: {}   # run manually from Actions tab
 
 jobs:
   migrate:
     runs-on: ubuntu-latest
     env:
-      # Byt till ditt projekt (DEV eller TEST)
+      # CHANGE THIS to your Supabase project
       DB_URL: jdbc:postgresql://db.kbqhuywtelqmuyhofjlp.supabase.co:5432/postgres?sslmode=require
       DB_USER: postgres
+      DB_PASSWORD: ${{ secrets.DB_PASSWORD }}   # add in Repo → Settings → Secrets → Actions
       CHANGELOG: db/changelog/master.yaml
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Show pending SQL (dry run)
-        uses: docker://liquibase/liquibase:4.33
+      - name: Set up Java (required by Liquibase)
+        uses: actions/setup-java@v4
         with:
-          args: >
-            --url=${{ env.DB_URL }}
-            --username=${{ env.DB_USER }}
-            --password=${{ secrets.DB_PASSWORD }}
-            --changelog-file=${{ env.CHANGELOG }}
-            updateSQL
+          distribution: temurin
+          java-version: '21'
 
-      - name: Status
-        uses: docker://liquibase/liquibase:4.33
-        with:
-          args: >
-            --url=${{ env.DB_URL }}
-            --username=${{ env.DB_USER }}
-            --password=${{ secrets.DB_PASSWORD }}
-            --changelog-file=${{ env.CHANGELOG }}
-            status
+      - name: Install Liquibase (tar.gz → runner temp)
+        shell: bash
+        run: |
+          set -euo pipefail
+          LIQ_VERSION=4.33.0
+          mkdir -p "$RUNNER_TEMP/liquibase"
+          curl -Ls "https://github.com/liquibase/liquibase/releases/download/v${LIQ_VERSION}/liquibase-${LIQ_VERSION}.tar.gz" \
+          | tar xz --strip-components=1 -C "$RUNNER_TEMP/liquibase"
+          chmod +x "$RUNNER_TEMP/liquibase/liquibase"
+          echo "$RUNNER_TEMP/liquibase" >> "$GITHUB_PATH"
 
-      - name: Apply changes (update)
-        uses: docker://liquibase/liquibase:4.33
-        with:
-          args: >
-            --url=${{ env.DB_URL }}
-            --username=${{ env.DB_USER }}
-            --password=${{ secrets.DB_PASSWORD }}
-            --changelog-file=${{ env.CHANGELOG }}
+      - name: Get PostgreSQL JDBC driver
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -L -o "$RUNNER_TEMP/postgresql.jar" https://jdbc.postgresql.org/download/postgresql-42.7.3.jar
+          test -s "$RUNNER_TEMP/postgresql.jar"
+
+      - name: Verify Liquibase is available
+        run: |
+          which liquibase
+          liquibase --version
+
+      - name: Dry run (show first 200 lines)
+        working-directory: db
+        run: |
+          liquibase \
+            --classpath="$RUNNER_TEMP/postgresql.jar" \
+            --url="${DB_URL}" \
+            --username="${DB_USER}" \
+            --password="${DB_PASSWORD}" \
+            --changeLogFile="${CHANGELOG#db/}" \
+            updateSQL | head -n 200 || true
+
+      - name: Apply changelog (update)
+        working-directory: db
+        run: |
+          liquibase \
+            --classpath="$RUNNER_TEMP/postgresql.jar" \
+            --url="${DB_URL}" \
+            --username="${DB_USER}" \
+            --password="${DB_PASSWORD}" \
+            --changeLogFile="${CHANGELOG#db/}" \
             update
