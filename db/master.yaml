@@ -1,0 +1,11 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0001-create-users-app
+      author: you
+      sql: |
+        CREATE TABLE IF NOT EXISTS public.users_app (
+          id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+          email      text UNIQUE NOT NULL,
+          full_name  text,
+          created_at timestamptz NOT NULL DEFAULT now()
+        );
