@@ -22,31 +22,21 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Download Liquibase ZIP and detect folder
-        id: lb
+      - name: Install Liquibase CLI
         shell: bash
         run: |
           set -euo pipefail
           LIQ_VERSION=4.33.0
-          ZIP="$RUNNER_TEMP/liquibase-${LIQ_VERSION}.zip"
+          INSTALL_ROOT="$(mktemp -d "$RUNNER_TEMP/liquibase-XXXXXX")"
+          ZIP="$INSTALL_ROOT/liquibase-${LIQ_VERSION}.zip"
           curl -Ls "https://github.com/liquibase/liquibase/releases/download/v${LIQ_VERSION}/liquibase-${LIQ_VERSION}.zip" -o "$ZIP"
-          # Read the top-level folder name from the zip (before extracting)
-          TOPDIR="$(unzip -Z1 "$ZIP" | head -n1 | cut -d/ -f1)"
-          echo "TOPDIR=$TOPDIR"
-          echo "topdir=$TOPDIR" >> "$GITHUB_OUTPUT"
-          # Extract to runner temp
-          unzip -q "$ZIP" -d "$RUNNER_TEMP"
-
-      - name: Add Liquibase to PATH
-        shell: bash
-        run: |
-          set -euo pipefail
-          LIQ_HOME="$RUNNER_TEMP/${{ steps.lb.outputs.topdir }}"
-          test -f "$LIQ_HOME/liquibase" || (echo "Liquibase binary not found in $LIQ_HOME" && ls -la "$LIQ_HOME" && exit 1)
+          unzip -q "$ZIP" -d "$INSTALL_ROOT"
+          LIQ_HOME="$(find "$INSTALL_ROOT" -mindepth 1 -maxdepth 1 -type d -name 'liquibase*' | head -n1)"
+          test -n "$LIQ_HOME" || (echo "Unable to detect Liquibase install folder" && ls -R "$INSTALL_ROOT" && exit 1)
+          test -f "$LIQ_HOME/liquibase" || (echo "Liquibase binary not found under $LIQ_HOME" && ls -R "$LIQ_HOME" && exit 1)
           chmod +x "$LIQ_HOME/liquibase"
           echo "$LIQ_HOME" >> "$GITHUB_PATH"
-          which liquibase
-          liquibase --version
+          "$LIQ_HOME/liquibase" --version
 
       - name: Get PostgreSQL JDBC driver
         shell: bash
