@@ -17,17 +17,36 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Install Liquibase (in runner temp)
+      - name: Install Liquibase into runner temp and add to PATH
+        shell: bash
         run: |
+          set -euo pipefail
           LIQ_VERSION=4.33.0
           curl -Ls "https://github.com/liquibase/liquibase/releases/download/v${LIQ_VERSION}/liquibase-${LIQ_VERSION}.tar.gz" -o "$RUNNER_TEMP/liquibase.tgz"
           mkdir -p "$RUNNER_TEMP/liquibase"
           tar -xzf "$RUNNER_TEMP/liquibase.tgz" -C "$RUNNER_TEMP/liquibase" --strip-components=1
+          chmod +x "$RUNNER_TEMP/liquibase/liquibase"
           echo "$RUNNER_TEMP/liquibase" >> "$GITHUB_PATH"
 
       - name: Get PostgreSQL JDBC driver
         run: |
           curl -L -o "$RUNNER_TEMP/postgresql.jar" https://jdbc.postgresql.org/download/postgresql-42.7.3.jar
+
+      - name: Verify Liquibase is available
+        run: |
+          which liquibase
+          liquibase --version
+
+      - name: Dry run (show pending SQL)
+        working-directory: db
+        run: |
+          liquibase \
+            --classpath="$RUNNER_TEMP/postgresql.jar" \
+            --url="jdbc:postgresql://db.kbqhuywtelqmuyhofjlp.supabase.co:5432/postgres?sslmode=require" \
+            --username=postgres \
+            --password="${DB_PASSWORD}" \
+            --changeLogFile=changelog/master.yaml \
+            updateSQL | head -n 200 || true
 
       - name: Apply changelog to Supabase
         working-directory: db
