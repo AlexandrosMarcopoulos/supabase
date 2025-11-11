@@ -1,17 +1,17 @@
-name: Liquibase → Supabase (manual first run)
+name: Liquibase → Supabase (manual first run, no Docker)
 
 on:
-  workflow_dispatch: {}   # Run manually from Actions
+  workflow_dispatch: {}   # run manually from Actions tab
 
 jobs:
   migrate:
     runs-on: ubuntu-latest
     env:
-      # ---- CHANGE THESE IF NEEDED ----
+      # CHANGE THIS to your Supabase project
       DB_URL: jdbc:postgresql://db.kbqhuywtelqmuyhofjlp.supabase.co:5432/postgres?sslmode=require
       DB_USER: postgres
-      DB_PASSWORD: ${{ secrets.DB_PASSWORD }}   # Add in GitHub → Settings → Secrets → Actions
-      # --------------------------------
+      DB_PASSWORD: ${{ secrets.DB_PASSWORD }}   # add in Repo → Settings → Secrets → Actions
+      CHANGELOG: db/changelog/master.yaml
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -45,24 +45,29 @@ jobs:
           curl -L -o "$RUNNER_TEMP/postgresql.jar" https://jdbc.postgresql.org/download/postgresql-42.7.3.jar
           test -s "$RUNNER_TEMP/postgresql.jar"
 
-      - name: Dry run (show first 200 lines of SQL)
+      - name: Verify Liquibase is available
+        run: |
+          which liquibase
+          liquibase --version
+
+      - name: Dry run (show first 200 lines)
         working-directory: db
         run: |
           liquibase \
             --classpath="$RUNNER_TEMP/postgresql.jar" \
-            --url="$DB_URL" \
-            --username="$DB_USER" \
-            --password="$DB_PASSWORD" \
-            --changeLogFile=changelog/master.yaml \
+            --url="${DB_URL}" \
+            --username="${DB_USER}" \
+            --password="${DB_PASSWORD}" \
+            --changeLogFile="${CHANGELOG#db/}" \
             updateSQL | head -n 200 || true
 
-      - name: Apply changelog to Supabase
+      - name: Apply changelog (update)
         working-directory: db
         run: |
           liquibase \
             --classpath="$RUNNER_TEMP/postgresql.jar" \
-            --url="$DB_URL" \
-            --username="$DB_USER" \
-            --password="$DB_PASSWORD" \
-            --changeLogFile=changelog/master.yaml \
+            --url="${DB_URL}" \
+            --username="${DB_USER}" \
+            --password="${DB_PASSWORD}" \
+            --changeLogFile="${CHANGELOG#db/}" \
             update
