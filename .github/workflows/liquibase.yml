@@ -1,7 +1,7 @@
 name: Liquibase → Supabase (manual first run)
 
 on:
-  workflow_dispatch: {}   # Run manually from Actions tab
+  workflow_dispatch: {}   # Run manually from Actions
 
 jobs:
   migrate:
@@ -22,30 +22,38 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Install Liquibase (ZIP) and add to PATH (robust)
+      - name: Download Liquibase ZIP and detect folder
+        id: lb
         shell: bash
         run: |
           set -euo pipefail
           LIQ_VERSION=4.33.0
-          ZIP="$RUNNER_TEMP/liquibase.zip"
+          ZIP="$RUNNER_TEMP/liquibase-${LIQ_VERSION}.zip"
           curl -Ls "https://github.com/liquibase/liquibase/releases/download/v${LIQ_VERSION}/liquibase-${LIQ_VERSION}.zip" -o "$ZIP"
+          # Read the top-level folder name from the zip (before extracting)
+          TOPDIR="$(unzip -Z1 "$ZIP" | head -n1 | cut -d/ -f1)"
+          echo "TOPDIR=$TOPDIR"
+          echo "topdir=$TOPDIR" >> "$GITHUB_OUTPUT"
+          # Extract to runner temp
           unzip -q "$ZIP" -d "$RUNNER_TEMP"
-          # Detect extracted dir (could be 'liquibase' or 'liquibase-<ver>')
-          LIQ_HOME="$(find "$RUNNER_TEMP" -maxdepth 1 -type d -name 'liquibase*' | head -n1)"
-          echo "Detected LIQ_HOME=$LIQ_HOME"
-          test -x "$LIQ_HOME/liquibase" || chmod +x "$LIQ_HOME/liquibase"
+
+      - name: Add Liquibase to PATH
+        shell: bash
+        run: |
+          set -euo pipefail
+          LIQ_HOME="$RUNNER_TEMP/${{ steps.lb.outputs.topdir }}"
+          test -f "$LIQ_HOME/liquibase" || (echo "Liquibase binary not found in $LIQ_HOME" && ls -la "$LIQ_HOME" && exit 1)
+          chmod +x "$LIQ_HOME/liquibase"
           echo "$LIQ_HOME" >> "$GITHUB_PATH"
+          which liquibase
+          liquibase --version
 
       - name: Get PostgreSQL JDBC driver
         shell: bash
         run: |
           set -euo pipefail
           curl -L -o "$RUNNER_TEMP/postgresql.jar" https://jdbc.postgresql.org/download/postgresql-42.7.3.jar
-
-      - name: Verify Liquibase is available
-        run: |
-          which liquibase
-          liquibase --version
+          test -s "$RUNNER_TEMP/postgresql.jar"
 
       - name: Dry run (show first 200 lines of SQL)
         working-directory: db
