@@ -1,78 +1,49 @@
-name: Liquibase → Supabase (manual first run)
+name: Liquibase → Supabase
 
 on:
-  workflow_dispatch: {}   # Run manually from Actions
+  workflow_dispatch: {}
+  push:
+    branches: [ "dev" ]
+    paths: [ "db/changelog/**" ]
 
 jobs:
   migrate:
     runs-on: ubuntu-latest
     env:
-      # ---- CHANGE THESE IF NEEDED ----
+      # Byt till ditt projekt (DEV eller TEST)
       DB_URL: jdbc:postgresql://db.kbqhuywtelqmuyhofjlp.supabase.co:5432/postgres?sslmode=require
       DB_USER: postgres
-      DB_PASSWORD: ${{ secrets.DB_PASSWORD }}   # Add in GitHub → Settings → Secrets → Actions
-      # --------------------------------
+      CHANGELOG: db/changelog/master.yaml
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Set up Java (required by Liquibase)
-        uses: actions/setup-java@v4
+      - name: Show pending SQL (dry run)
+        uses: docker://liquibase/liquibase:4.33
         with:
-          distribution: temurin
-          java-version: '21'
+          args: >
+            --url=${{ env.DB_URL }}
+            --username=${{ env.DB_USER }}
+            --password=${{ secrets.DB_PASSWORD }}
+            --changelog-file=${{ env.CHANGELOG }}
+            updateSQL
 
-      - name: Download Liquibase ZIP and detect folder
-        id: lb
-        shell: bash
-        run: |
-          set -euo pipefail
-          LIQ_VERSION=4.33.0
-          ZIP="$RUNNER_TEMP/liquibase-${LIQ_VERSION}.zip"
-          curl -Ls "https://github.com/liquibase/liquibase/releases/download/v${LIQ_VERSION}/liquibase-${LIQ_VERSION}.zip" -o "$ZIP"
-          # Read the top-level folder name from the zip (before extracting)
-          TOPDIR="$(unzip -Z1 "$ZIP" | head -n1 | cut -d/ -f1)"
-          echo "TOPDIR=$TOPDIR"
-          echo "topdir=$TOPDIR" >> "$GITHUB_OUTPUT"
-          # Extract to runner temp
-          unzip -q "$ZIP" -d "$RUNNER_TEMP"
+      - name: Status
+        uses: docker://liquibase/liquibase:4.33
+        with:
+          args: >
+            --url=${{ env.DB_URL }}
+            --username=${{ env.DB_USER }}
+            --password=${{ secrets.DB_PASSWORD }}
+            --changelog-file=${{ env.CHANGELOG }}
+            status
 
-      - name: Add Liquibase to PATH
-        shell: bash
-        run: |
-          set -euo pipefail
-          LIQ_HOME="$RUNNER_TEMP/${{ steps.lb.outputs.topdir }}"
-          test -f "$LIQ_HOME/liquibase" || (echo "Liquibase binary not found in $LIQ_HOME" && ls -la "$LIQ_HOME" && exit 1)
-          chmod +x "$LIQ_HOME/liquibase"
-          echo "$LIQ_HOME" >> "$GITHUB_PATH"
-          which liquibase
-          liquibase --version
-
-      - name: Get PostgreSQL JDBC driver
-        shell: bash
-        run: |
-          set -euo pipefail
-          curl -L -o "$RUNNER_TEMP/postgresql.jar" https://jdbc.postgresql.org/download/postgresql-42.7.3.jar
-          test -s "$RUNNER_TEMP/postgresql.jar"
-
-      - name: Dry run (show first 200 lines of SQL)
-        working-directory: db
-        run: |
-          liquibase \
-            --classpath="$RUNNER_TEMP/postgresql.jar" \
-            --url="$DB_URL" \
-            --username="$DB_USER" \
-            --password="$DB_PASSWORD" \
-            --changeLogFile=changelog/master.yaml \
-            updateSQL | head -n 200 || true
-
-      - name: Apply changelog to Supabase
-        working-directory: db
-        run: |
-          liquibase \
-            --classpath="$RUNNER_TEMP/postgresql.jar" \
-            --url="$DB_URL" \
-            --username="$DB_USER" \
-            --password="$DB_PASSWORD" \
-            --changeLogFile=changelog/master.yaml \
+      - name: Apply changes (update)
+        uses: docker://liquibase/liquibase:4.33
+        with:
+          args: >
+            --url=${{ env.DB_URL }}
+            --username=${{ env.DB_USER }}
+            --password=${{ secrets.DB_PASSWORD }}
+            --changelog-file=${{ env.CHANGELOG }}
             update
