@@ -1,7 +1,7 @@
 name: Liquibase Migration (Supabase Free / IPv6)
 
 on:
-  workflow_dispatch: {}   # run manually from Actions tab
+  workflow_dispatch: {}
 
 jobs:
   migrate:
@@ -17,19 +17,23 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Install Liquibase + PostgreSQL driver
+      - name: Install Liquibase (in runner temp)
         run: |
           LIQ_VERSION=4.33.0
-          curl -Ls https://github.com/liquibase/liquibase/releases/download/v${LIQ_VERSION}/liquibase-${LIQ_VERSION}.tar.gz -o lb.tgz
-          sudo tar -xzf lb.tgz -C /usr/local
-          echo "/usr/local/liquibase" >> $GITHUB_PATH
-          sudo mkdir -p /usr/local/liquibase/lib
-          curl -L -o /usr/local/liquibase/lib/postgresql.jar https://jdbc.postgresql.org/download/postgresql-42.7.3.jar
+          curl -Ls "https://github.com/liquibase/liquibase/releases/download/v${LIQ_VERSION}/liquibase-${LIQ_VERSION}.tar.gz" -o "$RUNNER_TEMP/liquibase.tgz"
+          mkdir -p "$RUNNER_TEMP/liquibase"
+          tar -xzf "$RUNNER_TEMP/liquibase.tgz" -C "$RUNNER_TEMP/liquibase" --strip-components=1
+          echo "$RUNNER_TEMP/liquibase" >> "$GITHUB_PATH"
+
+      - name: Get PostgreSQL JDBC driver
+        run: |
+          curl -L -o "$RUNNER_TEMP/postgresql.jar" https://jdbc.postgresql.org/download/postgresql-42.7.3.jar
 
       - name: Apply changelog to Supabase
         working-directory: db
         run: |
           liquibase \
+            --classpath="$RUNNER_TEMP/postgresql.jar" \
             --url="jdbc:postgresql://db.kbqhuywtelqmuyhofjlp.supabase.co:5432/postgres?sslmode=require" \
             --username=postgres \
             --password="${DB_PASSWORD}" \
