@@ -37,8 +37,8 @@ jobs:
           set -euo pipefail
           LOG_LEVEL="${LB_LOG:-info}"
           docker run --rm \
-            -v "$PWD":/liquibase \
-            -w /liquibase \
+            -v "$PWD":/workspace \
+            -w /workspace \
             liquibase/liquibase:4.33 \
             --defaultsFile=db/liquibase.properties \
             --classpath=db/lib/postgresql.jar \

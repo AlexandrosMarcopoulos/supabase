@@ -28,7 +28,7 @@ Add the following at the repository (or organization) level before triggering th
    - Checks out the repo.
    - Verifies that the three required secrets exist.
    - Runs `docker run liquibase/liquibase:4.33 ... update`, mounting the repo so `db/liquibase.properties` and the PostgreSQL driver are available.
-3. Liquibase connects to Supabase using the provided secrets and applies any pending changesets.
+3. Liquibase connects to Supabase using the provided secrets and applies any pending changesets. The workflow mounts the repo at `/workspace` inside the Liquibase Docker container so the bundled changelog and JDBC driver remain accessible.
 
 ### Local development
 
