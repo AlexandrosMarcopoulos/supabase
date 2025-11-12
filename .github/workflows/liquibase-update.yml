@@ -1,0 +1,49 @@
+name: Liquibase Migrations
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "db/**"
+      - ".github/workflows/liquibase-update.yml"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      LB_URL: ${{ secrets.SUPABASE_JDBC_URL }}
+      LB_USER: ${{ secrets.SUPABASE_DB_USER }}
+      LB_PASS: ${{ secrets.SUPABASE_DB_PASS }}
+      LB_LOG: ${{ vars.LIQUIBASE_LOG_LEVEL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify Liquibase secrets
+        run: |
+          set -euo pipefail
+          for var in LB_URL LB_USER LB_PASS; do
+            if [ -z "${!var}" ]; then
+              echo "Missing required secret for $var" >&2
+              exit 1
+            fi
+          done
+
+      - name: Run Liquibase update
+        run: |
+          set -euo pipefail
+          LOG_LEVEL="${LB_LOG:-info}"
+          docker run --rm \
+            -v "$PWD":/liquibase \
+            -w /liquibase \
+            liquibase/liquibase:4.33 \
+            --defaultsFile=db/liquibase.properties \
+            --classpath=db/lib/postgresql.jar \
+            --url="$LB_URL" \
+            --username="$LB_USER" \
+            --password="$LB_PASS" \
+            --logLevel="$LOG_LEVEL" \
+            update

@@ -11,7 +11,7 @@ jobs:
       DB_URL: jdbc:postgresql://db.kbqhuywtelqmuyhofjlp.supabase.co:5432/postgres?sslmode=require
       DB_USER: postgres
       DB_PASSWORD: ${{ secrets.DB_PASSWORD }}   # add in Repo → Settings → Secrets → Actions
-      CHANGELOG: db/changelog/master.yaml
+      CHANGELOG: db/changelog/master.changelog.yaml
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
